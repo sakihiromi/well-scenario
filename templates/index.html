@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Well-Scenario - 会議シナリオ生成システム</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/chartjs-plugin-dragdata@2.2.5/dist/chartjs-plugin-dragdata.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 Well-Scenario</h1>
+            <p class="subtitle">会議シナリオ生成 & 指標アノテーションシステム</p>
+        </header>
+
+        <!-- 入力セクション -->
+        <section class="input-section card">
+            <h2>📝 会議設定</h2>
+
+            <div class="form-group">
+                <label for="meeting-purpose">会議の目的</label>
+                <input type="text" id="meeting-purpose" placeholder="例: 自動会議設定機能の評価結果報告と改善案の検討">
+            </div>
+
+            <div class="form-group">
+                <label for="meeting-format">会議の形式</label>
+                <select id="meeting-format">
+                    <option value="">選択してください</option>
+                    <option value="定例・進捗">定例・進捗</option>
+                    <option value="ブレインストーミング">ブレインストーミング</option>
+                    <option value="意思決定会議">意思決定会議</option>
+                    <option value="報告会">報告会</option>
+                    <option value="打ち合わせ">打ち合わせ</option>
+                    <option value="その他">その他</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="profile-select">参加者プロフィール</label>
+                <select id="profile-select">
+                    <option value="">読み込み中...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="num-utterances">発言数</label>
+                <input type="number" id="num-utterances" value="20" min="5" max="50">
+            </div>
+
+            <button id="generate-btn" class="btn-primary">
+                ✨ シナリオ生成
+            </button>
+        </section>
+
+        <!-- プロフィール表示セクション -->
+        <section id="profile-section" class="profile-section" style="display: none;">
+            <h2>👥 参加者プロフィール</h2>
+            <div id="profile-display" class="profile-grid"></div>
+        </section>
+
+        <!-- ローディング -->
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>シナリオを生成中...</p>
+        </div>
+
+        <!-- シナリオ表示セクション -->
+        <section id="scenario-section" class="scenario-section" style="display: none;">
+            <div class="scenario-header">
+                <h2>🎬 生成されたシナリオ</h2>
+                <div id="scenario-metadata" class="metadata"></div>
+            </div>
+
+            <div id="scenario-display" class="scenario-container"></div>
+        </section>
+
+        <!-- グラフ表示セクション -->
+        <section id="graph-section" class="graph-section" style="display: none;">
+            <div class="graph-header">
+                <h2>📈 メトリクススコアのグラフ</h2>
+                <button id="save-annotations-btn" class="btn-secondary" disabled>
+                    💾 人手アノテーションを保存
+                </button>
+            </div>
+
+            <div class="graph-container">
+                <div class="graph-item">
+                    <h3>威圧度</h3>
+                    <canvas id="chart-intimidation"></canvas>
+                </div>
+                <div class="graph-item">
+                    <h3>逸脱度</h3>
+                    <canvas id="chart-deviation"></canvas>
+                </div>
+                <div class="graph-item">
+                    <h3>発言無効度</h3>
+                    <canvas id="chart-ineffectiveness"></canvas>
+                </div>
+                <div class="graph-item">
+                    <h3>偏り度</h3>
+                    <canvas id="chart-bias"></canvas>
+                </div>
+            </div>
+
+            <div class="graph-legend">
+                <span class="legend-item">
+                    <span class="legend-line machine"></span> 機械アノテーション
+                </span>
+                <span class="legend-item">
+                    <span class="legend-line human"></span> 人手アノテーション
+                </span>
+            </div>
+
+            <div class="graph-info">
+                <p>💡 <strong>使い方:</strong> 赤い点線（人手アノテーション）の点をドラッグして、スコアを調整できます。調整後、「保存」ボタンをクリックしてください。</p>
+            </div>
+        </section>
+
+        <!-- 指標の説明 -->
+        <section class="metrics-info card">
+            <h2>📊 評価指標について</h2>
+            <div id="metrics-display" class="metrics-grid">
+                <div class="metric-card">
+                    <h3>威圧度</h3>
+                    <p>発言の威圧性や心理的圧力を評価</p>
+                    <span class="score-range">0-3: 良好 | 4-6: 普通 | 7-9: 問題あり</span>
+                </div>
+                <div class="metric-card">
+                    <h3>逸脱度</h3>
+                    <p>会議の目的からの逸脱を評価</p>
+                    <span class="score-range">0-3: 良好 | 4-6: 普通 | 7-9: 問題あり</span>
+                </div>
+                <div class="metric-card">
+                    <h3>発言無効度</h3>
+                    <p>目的達成への貢献度を評価</p>
+                    <span class="score-range">0-3: 良好 | 4-6: 普通 | 7-9: 問題あり</span>
+                </div>
+                <div class="metric-card">
+                    <h3>偏り度</h3>
+                    <p>発言の公平性や偏りを評価</p>
+                    <span class="score-range">0-3: 良好 | 4-6: 普通 | 7-9: 問題あり</span>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/chart_editor.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+
+</html>
