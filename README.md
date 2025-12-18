@@ -19,13 +19,15 @@ Well-Scenarioは、参加者プロフィールと会議設定に基づいて、�
 | 機能 | 説明 |
 |------|------|
 | 📝 **シナリオ生成** | 参加者プロフィールに基づいてリアルな会議の流れを自動生成 |
+| 🎯 **重点指標指定** | 特定の指標（威圧度、逸脱度等）に焦点を当てたシナリオ生成 |
 | 📊 **指標アノテーション** | 各発言を4つの指標で0-9の10段階評価 |
-| � **グラフ表示** | メトリクススコアを折れ線グラフで可視化 |
+| 📈 **グラフ表示** | メトリクススコアを折れ線グラフで可視化 |
 | ✏️ **人手アノテーション** | グラフ上で点をドラッグしてスコアを手動調整 |
-| �👥 **プロフィール管理** | 既存のJSONファイルから参加者情報を読み込み |
+| 👥 **プロフィール管理** | 既存のJSONファイルから参加者情報を読み込み |
 | 🎨 **視覚的表示** | スコアに応じた色分けと詳細な理由説明 |
 | 🌐 **Webインターフェース** | モダンなダークテーマUIで直感的に操作可能 |
 | 💾 **自動保存** | 生成したシナリオをJSONファイルとして自動保存 |
+| 📄 **CSVエクスポート** | 人手アノテーション用にCSV形式でダウンロード |
 | 🔧 **サニタイズモード** | プロフィールの過激表現を自動緩和（APIポリシー対策） |
 
 ---
@@ -66,10 +68,12 @@ Well-Scenarioは、参加者プロフィールと会議設定に基づいて、�
 
 ### 処理フロー
 
-1. **ユーザー入力**: 会議の目的、形式、参加者プロフィール、発言数を入力
+1. **ユーザー入力**: 会議の目的、形式、参加者プロフィール、発言数、重点指標（オプション）を入力
 2. **シナリオ生成**: `ScenarioGenerator`がLLMを使用してリアルな会議の流れを生成
+   - 重点指標が指定されている場合、その指標の高スコア発言を目標割合に応じて含める
 3. **アノテーション**: `MetricAnnotator`が各発言を4つの指標で評価
 4. **結果表示**: フロントエンドでスコアに応じた色分けと詳細表示
+5. **エクスポート**: JSONまたはCSV形式でダウンロード可能
 
 ---
 
@@ -223,13 +227,19 @@ well-scenario/
 ├── requirements.txt          # 依存パッケージ
 ├── .env                      # 環境変数設定
 ├── README.md                 # このファイル
+├── test_csv.py               # CSVエクスポート機能のテスト
 ├── data/
 │   ├── extra.json            # 指標定義JSON
 │   ├── profiles/             # 参加者プロフィールディレクトリ
 │   │   ├── トライアル_飲み会ズレ.json
+│   │   ├── 威圧度_高圧上司とパワハラ会議.json
+│   │   ├── 逸脱度_脱線王と雑談会議.json
+│   │   ├── 発言無効度_空回り会議.json
+│   │   ├── 偏り度_ワンマン社長の独演会.json
 │   │   └── ...
 │   └── outputs/              # 生成されたシナリオの保存先
-│       └── 20241210_172130_トライアル_飲み会ズレ.json
+│       ├── 20241210_172130_トライアル_飲み会ズレ.json
+│       └── 20241210_172130_トライアル_飲み会ズレ_annotation.csv
 ├── templates/
 │   └── index.html            # Webインターフェース
 └── static/
@@ -259,21 +269,42 @@ Flaskベースのウェブサーバー。APIエンドポイントを提供し、
 - プロフィールJSONの読み込み
 - LLMへのプロンプト構築
 - シナリオ（発言リスト）の生成
+- 重点指標に基づいた問題行動の生成制御
+- 指標定義ファイル（extra.json）からの情報活用
 
 ```python
 # 使用例
-generator = ScenarioGenerator(api_key, model_name)
+generator = ScenarioGenerator(
+    api_key=api_key,
+    model_name=model_name,
+    sanitize_mode=True,
+    extra_json_path="data/extra.json"
+)
 profiles = generator.load_profiles("profiles.json")
+
+# 基本的な生成
 scenario = generator.generate_scenario(
     profiles=profiles,
     meeting_purpose="自動会議設定機能の評価結果報告",
     meeting_format="進捗報告会議",
-    num_utterances=20
+    num_utterances=40
+)
+
+# 重点指標を指定した生成
+scenario = generator.generate_scenario(
+    profiles=profiles,
+    meeting_purpose="自動会議設定機能の評価結果報告",
+    meeting_format="進捗報告会議",
+    num_utterances=40,
+    focus_metrics=["威圧度", "逸脱度"],  # 重点を置く指標
+    target_ratio=50  # 高スコア発言の目標割合（%）
 )
 ```
 
 **生成パラメータ:**
-- `temperature=0.8`: 多様性のある自然な発言を生成
+- `temperature=0.95`: 多様性のある自然な発言を生成
+- `focus_metrics`: 重点を置く指標（指定しない場合は全指標をバランスよく含める）
+- `target_ratio`: 重点指標の高スコア発言の目標割合（10-90%、デフォルト50%）
 
 ### metric_annotator.py - 指標アノテーションモジュール
 
@@ -410,7 +441,9 @@ annotated_scenario = annotator.annotate_scenario(
   "meeting_purpose": "会議の目的",
   "meeting_format": "会議の形式",
   "profile_filename": "プロフィールファイル名",
-  "num_utterances": 20
+  "num_utterances": 40,
+  "focus_metrics": ["威圧度", "逸脱度"],
+  "target_ratio": 50
 }
 ```
 
@@ -420,6 +453,8 @@ annotated_scenario = annotator.annotate_scenario(
 | `meeting_format` | string | ✅ | - | 会議の形式 |
 | `profile_filename` | string | ✅ | - | プロフィールファイル名 |
 | `num_utterances` | int | ❌ | 20 | 発言数（5-50） |
+| `focus_metrics` | array | ❌ | 全指標 | 重点を置く指標のリスト（例: `["威圧度", "逸脱度"]`） |
+| `target_ratio` | int | ❌ | 50 | 重点指標の高スコア（7-9）発言の目標割合（10-90%） |
 
 **レスポンス例:**
 ```json
@@ -492,13 +527,33 @@ annotated_scenario = annotator.annotate_scenario(
 
 ### `GET /api/output/<filename>/download`
 
-保存済みシナリオをダウンロード
+保存済みシナリオをダウンロード（JSON形式）
 
 **パラメータ:**
 - `filename`: 出力ファイル名
 
 **レスポンス:**
 - JSONファイルのダウンロード
+
+### `GET /api/output/<filename>/csv`
+
+保存済みシナリオをCSV形式でダウンロード（人手アノテーション用）
+
+**パラメータ:**
+- `filename`: 出力ファイル名
+
+**レスポンス:**
+- CSVファイルのダウンロード（BOM付きUTF-8、Excel対応）
+
+**CSVフォーマット:**
+```csv
+Speaker,Content,威圧度,逸脱度,発言無効度,偏り度
+前田課長,結論は？,,,,
+田中,あの、えっと...,,,,
+```
+
+- 発話者と発言内容が含まれ、指標カラムは空欄（手動で記入用）
+- ファイル名: `{元のファイル名}_annotation.csv`
 
 ### `POST /api/output/<filename>/annotations`
 
@@ -650,10 +705,13 @@ annotated_scenario = annotator.annotate_scenario(
   - その他
 - 参加者プロフィール（セレクトボックス）
 - 発言数（数値入力: 5-50）
+- 重点指標（チェックボックス、オプション）
+  - 威圧度、逸脱度、発言無効度、偏り度から選択
+- 目標割合（スライダー: 10-90%、重点指標選択時のみ有効）
 
 **結果表示:**
 - 参加者プロフィールのカード表示
-- 発言ごとのスコア表示
+- 発言ごとのスコア表示（0-9の10段階）
   - 🟢 緑: 低スコア（0-3）- 良好
   - 🟡 黄: 中スコア（4-6）- 普通
   - 🔴 赤: 高スコア（7-9）- 問題あり
@@ -665,13 +723,17 @@ annotated_scenario = annotator.annotate_scenario(
   - 青い実線: 機械アノテーション（LLMによる自動評価）
   - 赤い点線: 人手アノテーション（ユーザーによる調整）
 - インタラクティブな編集機能
-  - グラフ上の点をドラッグしてスコアを調整
-  - スコアは0-9の範囲内に自動制限
+  - グラフ上の点をドラッグしてスコアを調整（0-9の範囲）
   - 編集内容はリアルタイムで反映
 - 保存機能
   - 編集したスコアを保存ボタンでJSON保存
   - 機械アノテーションと人手アノテーションを分離保存
   - 編集日時と注釈を記録
+
+**ダウンロード機能:**
+- JSON形式: シナリオ全体（メタデータ＋発言＋アノテーション）
+- CSV形式: 人手アノテーション用（発話者、発言内容、空欄の指標カラム）
+  - BOM付きUTF-8でExcelでの文字化けを防止
 
 ---
 
@@ -692,6 +754,9 @@ python scenario_generator.py
 
 # アノテーションのテスト
 python metric_annotator.py
+
+# CSVエクスポート機能のテスト
+python test_csv.py
 ```
 
 ### カスタマイズ

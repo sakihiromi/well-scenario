@@ -15,8 +15,13 @@
 <body>
     <div class="container">
         <header>
-            <h1>🎯 Well-Scenario</h1>
-            <p class="subtitle">会議シナリオ生成 & 指標アノテーションシステム</p>
+            <div class="header-content">
+                <img src="/static/images/mascot.jpg" alt="Well-Scenario Mascot" class="mascot-icon">
+                <div class="header-text">
+                    <h1>✨ Well-Scenario</h1>
+                    <p class="subtitle">会議シナリオ生成・評価システム</p>
+                </div>
+            </div>
         </header>
 
         <!-- 入力セクション -->
@@ -50,7 +55,40 @@
 
             <div class="form-group">
                 <label for="num-utterances">発言数</label>
-                <input type="number" id="num-utterances" value="20" min="5" max="50">
+                <input type="number" id="num-utterances" value="40" min="5" max="100">
+            </div>
+
+            <div class="form-group">
+                <label>重点指標（複数選択可）</label>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="focus-metrics" value="威圧度">
+                        威圧度
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="focus-metrics" value="逸脱度">
+                        逸脱度
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="focus-metrics" value="発言無効度">
+                        発言無効度
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="focus-metrics" value="偏り度">
+                        偏り度
+                    </label>
+                </div>
+                <small class="form-hint">※未選択の場合、全ての指標をバランスよく含めます</small>
+            </div>
+
+            <div class="form-group" id="target-ratio-group" style="display: none;">
+                <label for="target-ratio">高スコア発言の目標割合</label>
+                <div class="ratio-input-container">
+                    <input type="range" id="target-ratio-slider" min="10" max="90" step="10" value="50">
+                    <input type="number" id="target-ratio" min="10" max="90" step="10" value="50">
+                    <span class="ratio-unit">%</span>
+                </div>
+                <small class="form-hint">選択した指標でスコア7-9の発言が全体の何%になるか指定（10-90%）</small>
             </div>
 
             <button id="generate-btn" class="btn-primary">
@@ -86,6 +124,9 @@
                 <h2>📈 メトリクススコアのグラフ</h2>
                 <button id="save-annotations-btn" class="btn-secondary" disabled>
                     💾 人手アノテーションを保存
+                </button>
+                <button id="download-csv-btn" class="btn-secondary" style="margin-left: 10px;">
+                    📥 アノテーション用CSV
                 </button>
             </div>
 
@@ -129,22 +170,22 @@
                 <div class="metric-card">
                     <h3>威圧度</h3>
                     <p>発言の威圧性や心理的圧力を評価</p>
-                    <span class="score-range">0-3: 良好 | 4-6: 普通 | 7-9: 問題あり</span>
+                    <span class="score-range">1-3: 良好 | 4-6: 普通 | 7-9: 問題あり</span>
                 </div>
                 <div class="metric-card">
                     <h3>逸脱度</h3>
                     <p>会議の目的からの逸脱を評価</p>
-                    <span class="score-range">0-3: 良好 | 4-6: 普通 | 7-9: 問題あり</span>
+                    <span class="score-range">1-3: 良好 | 4-6: 普通 | 7-9: 問題あり</span>
                 </div>
                 <div class="metric-card">
                     <h3>発言無効度</h3>
                     <p>目的達成への貢献度を評価</p>
-                    <span class="score-range">0-3: 良好 | 4-6: 普通 | 7-9: 問題あり</span>
+                    <span class="score-range">1-3: 良好 | 4-6: 普通 | 7-9: 問題あり</span>
                 </div>
                 <div class="metric-card">
                     <h3>偏り度</h3>
                     <p>発言の公平性や偏りを評価</p>
-                    <span class="score-range">0-3: 良好 | 4-6: 普通 | 7-9: 問題あり</span>
+                    <span class="score-range">1-3: 良好 | 4-6: 普通 | 7-9: 問題あり</span>
                 </div>
             </div>
         </section>

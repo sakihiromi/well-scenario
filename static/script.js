@@ -12,6 +12,11 @@ const loading = document.getElementById('loading');
 const scenarioSection = document.getElementById('scenario-section');
 const scenarioDisplay = document.getElementById('scenario-display');
 const scenarioMetadata = document.getElementById('scenario-metadata');
+const downloadCsvBtn = document.getElementById('download-csv-btn');
+const saveAnnotationsBtn = document.getElementById('save-annotations-btn');
+const targetRatioGroup = document.getElementById('target-ratio-group');
+const targetRatioSlider = document.getElementById('target-ratio-slider');
+const targetRatioInput = document.getElementById('target-ratio');
 
 // State
 let currentProfile = null;
@@ -25,6 +30,34 @@ document.addEventListener('DOMContentLoaded', () => {
 function setupEventListeners() {
     generateBtn.addEventListener('click', handleGenerate);
     profileSelect.addEventListener('change', handleProfileChange);
+    if (downloadCsvBtn) {
+        downloadCsvBtn.addEventListener('click', handleDownloadCsv);
+
+        // 重点指標の選択状態を監視して目標割合入力の表示/非表示を制御
+        const focusMetricsCheckboxes = document.querySelectorAll('input[name="focus-metrics"]');
+        focusMetricsCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                const anyChecked = Array.from(focusMetricsCheckboxes).some(cb => cb.checked);
+                targetRatioGroup.style.display = anyChecked ? 'block' : 'none';
+            });
+        });
+
+        // スライダーと数値入力を同期
+        targetRatioSlider.addEventListener('input', (e) => {
+            targetRatioInput.value = e.target.value;
+        });
+
+        targetRatioInput.addEventListener('input', (e) => {
+            let value = parseInt(e.target.value) || 50;
+            // 範囲制限
+            if (value < 10) value = 10;
+            if (value > 90) value = 90;
+            // 10の倍数に丸める
+            value = Math.round(value / 10) * 10;
+            e.target.value = value;
+            targetRatioSlider.value = value;
+        });
+    }
 }
 
 // Load available profiles
@@ -134,6 +167,10 @@ async function handleGenerate() {
     const filename = profileSelect.value;
     const numUtts = parseInt(numUtterances.value);
 
+    // Get selected focus metrics
+    const focusMetricsCheckboxes = document.querySelectorAll('input[name="focus-metrics"]:checked');
+    const focusMetrics = Array.from(focusMetricsCheckboxes).map(cb => cb.value);
+
     // Validation
     if (!purpose) {
         showError('会議の目的を入力してください');
@@ -165,7 +202,9 @@ async function handleGenerate() {
                 meeting_purpose: purpose,
                 meeting_format: format,
                 profile_filename: filename,
-                num_utterances: numUtts
+                num_utterances: numUtts,
+                focus_metrics: focusMetrics,
+                target_ratio: focusMetrics.length > 0 ? parseInt(targetRatioInput.value) : null
             })
         });
 
@@ -247,6 +286,17 @@ function displayScenario(scenario, metadata) {
         const filename = metadata.saved_to ? metadata.saved_to.split('/').pop() : null;
         chartEditor.initializeCharts(scenario, filename);
     }
+
+    // Save metadata for CSV download
+    if (metadata.saved_to) {
+        scenarioMetadata.setAttribute('data-saved-to', metadata.saved_to);
+        if (downloadCsvBtn) downloadCsvBtn.disabled = false;
+        if (saveAnnotationsBtn) saveAnnotationsBtn.disabled = false;
+    } else {
+        scenarioMetadata.removeAttribute('data-saved-to');
+        if (downloadCsvBtn) downloadCsvBtn.disabled = true;
+        if (saveAnnotationsBtn) saveAnnotationsBtn.disabled = true;
+    }
 }
 
 // Get score class based on value
@@ -260,4 +310,27 @@ function getScoreClass(score) {
 function showError(message) {
     alert('エラー: ' + message);
     console.error(message);
+}
+
+// Handle CSV download
+async function handleDownloadCsv() {
+    // 現在表示中のシナリオのメタデータからファイル名を取得
+    // Chart.jsの初期化時に渡されたファイル名、またはAPIレスポンスのsaved_toから取得する必要がある
+    // ここではグローバル変数やDOM要素から取得するのが難しいため、
+    // reload時にメタデータを保持するか、DOMに埋め込む必要がある
+
+    // 簡易的な解決策として、現在選択されているプロファイルの最新の出力を特定するのは難しいので、
+    // displayScenarioでmetadataをどこかに保存しておくのが良い
+
+    const savedTo = scenarioMetadata.getAttribute('data-saved-to');
+
+    if (!savedTo) {
+        // まだ生成・保存されていない、または読み込まれていない
+        // 生成直後の場合は metadata.saved_to があるはず
+        showError('シナリオが保存されていません。');
+        return;
+    }
+
+    const filename = savedTo.split('/').pop();
+    window.location.href = `/api/output/${filename}/csv`;
 }

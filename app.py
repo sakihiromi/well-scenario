@@ -9,6 +9,8 @@ import os
 import json
 from pathlib import Path
 from datetime import datetime
+import csv
+import io
 
 from scenario_generator import ScenarioGenerator
 from metric_annotator import MetricAnnotator
@@ -34,7 +36,7 @@ SANITIZE_MODE = os.getenv("SANITIZE_MODE", "true").lower() in ("true", "1", "yes
 Path(OUTPUTS_DIR).mkdir(parents=True, exist_ok=True)
 
 # モジュール初期化
-generator = ScenarioGenerator(OPENAI_API_KEY, SCENARIO_MODEL, sanitize_mode=SANITIZE_MODE)
+generator = ScenarioGenerator(OPENAI_API_KEY, SCENARIO_MODEL, sanitize_mode=SANITIZE_MODE, extra_json_path=EXTRA_JSON_PATH)
 annotator = MetricAnnotator(OPENAI_API_KEY, ANNOTATION_MODEL, EXTRA_JSON_PATH)
 
 
@@ -101,6 +103,8 @@ def generate_scenario():
         meeting_format = data.get('meeting_format', '')
         profile_filename = data.get('profile_filename', '')
         num_utterances = data.get('num_utterances', 20)
+        focus_metrics = data.get('focus_metrics', [])  # 重点指標
+        target_ratio = data.get('target_ratio', 50)  # 目標割合（デフォルト50%）
         
         if not meeting_purpose or not meeting_format:
             return jsonify({"error": "会議の目的と形式を入力してください"}), 400
@@ -117,12 +121,14 @@ def generate_scenario():
         profiles = generator.load_profiles(str(profile_path))
         
         # シナリオ生成
-        print(f"シナリオ生成中: 目的={meeting_purpose}, 形式={meeting_format}")
+        print(f"シナリオ生成中: 目的={meeting_purpose}, 形式={meeting_format}, 重点指標={focus_metrics or '全て'}, 目標割合={target_ratio}%")
         scenario = generator.generate_scenario(
             profiles=profiles,
             meeting_purpose=meeting_purpose,
             meeting_format=meeting_format,
-            num_utterances=num_utterances
+            num_utterances=num_utterances,
+            focus_metrics=focus_metrics if focus_metrics else None,
+            target_ratio=target_ratio
         )
         
         if not scenario:
@@ -236,6 +242,55 @@ def download_output(filename):
         as_attachment=True,
         download_name=filename
     )
+
+
+@app.route('/api/output/<path:filename>/csv', methods=['GET'])
+def download_output_csv(filename):
+    """保存済みシナリオをCSVとしてダウンロード（人手アノテーション用）"""
+    output_path = Path(OUTPUTS_DIR) / filename
+    
+    if not output_path.exists():
+        return jsonify({"error": "ファイルが見つかりません"}), 404
+    
+    try:
+        with open(output_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        scenario = data.get('scenario', [])
+        
+        # CSV生成
+        si = io.StringIO()
+        writer = csv.writer(si)
+        
+        # ヘッダー: 発話者, 発話内容, 各評価指標（空欄）
+        # 指標は固定: 威圧度, 逸脱度, 発言無効度, 偏り度
+        header = ['Speaker', 'Content', '威圧度', '逸脱度', '発言無効度', '偏り度']
+        writer.writerow(header)
+        
+        for turn in scenario:
+            speaker = turn.get('speaker', '')
+            text = turn.get('text', '')
+            # 指標のカラムは空欄にする
+            row = [speaker, text, '', '', '', '']
+            writer.writerow(row)
+            
+        output = io.BytesIO()
+        output.write(si.getvalue().encode('utf-8-sig')) # Excelで文字化けしないようにBOM付きUTF-8
+        output.seek(0)
+        
+        csv_filename = Path(filename).stem + '_annotation.csv'
+        
+        return send_file(
+            output,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=csv_filename
+        )
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"CSV生成に失敗しました: {str(e)}"}), 500
 
 
 @app.route('/api/output/<path:filename>/annotations', methods=['POST'])
